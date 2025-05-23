@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 7000;
@@ -31,7 +31,7 @@ async function run() {
 
     const groupCollection = client.db("hobbyDB").collection("groups");
 
-    // create group api
+    // create post group api
 
     app.post("/groups", async (req, res) => {
       const newGroup = req.body;
@@ -43,8 +43,18 @@ async function run() {
 
     // get operation
 
-   
+    app.get("/groups", async (req, res) => {
+  try {
+    const groups = await groupCollection.find().toArray();
+    res.json(groups);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Server Error");
+  }
+});
 
+   
+// featured group get section
 
     app.get("/featured-groups", async (req, res) => {
       try {
@@ -55,23 +65,24 @@ async function run() {
       }
     });
 
-    // featured group section
+    
+    // end point for single group
 
-    // app.get("/groups", async (req, res) => {
-    //   try {
-    //     const today = new Date();
-    //     today.setHours(0, 0, 0, 0);
-    //     const featuredGroups = await groupCollection
-    //       .find({ endDate: { $gte: today } })
-    //       .sort({ createdAt: -1 })
-    //       .limit(6)
-    //       .toArray();
-    //     res.json(featuredGroups);
-    //   } catch (error) {
-    //     console.error(error);
-    //     res.status(500).send("Server Error");
-    //   }
-    // });
+    app.get("/groups/:id", async (req, res) => {
+  const id = req.params.id;
+  try {
+    const group = await groupCollection.findOne({ _id: new ObjectId(id) });
+    if (!group) {
+      return res.status(404).send("Group not found");
+    }
+    res.json(group);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Server Error");
+  }
+});
+
+ 
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
