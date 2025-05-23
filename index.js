@@ -82,6 +82,25 @@ async function run() {
   }
 });
 
+
+  // delete api for per group
+
+app.delete("/groups/:id", async (req, res) => {
+  const id = req.params.id;
+  try {
+    const result = await groupCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).send({ message: "Group not found" });
+    }
+
+    res.send({ success: true, message: "Group deleted successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ success: false, message: "Failed to delete group" });
+  }
+});
+
  
 
     // Send a ping to confirm a successful connection
