@@ -35,11 +35,43 @@ async function run() {
 
     app.post("/groups", async (req, res) => {
       const newGroup = req.body;
-      console.log('Received group:',newGroup);
+      console.log("Received group:", newGroup);
 
       const result = await groupCollection.insertOne(newGroup);
       res.send(result);
     });
+
+    // get operation
+
+   
+
+
+    app.get("/featured-groups", async (req, res) => {
+      try {
+        const groups = await groupCollection.find().toArray();
+        res.json(groups);
+      } catch (error) {
+        res.status(500).send("Server Error");
+      }
+    });
+
+    // featured group section
+
+    // app.get("/groups", async (req, res) => {
+    //   try {
+    //     const today = new Date();
+    //     today.setHours(0, 0, 0, 0);
+    //     const featuredGroups = await groupCollection
+    //       .find({ endDate: { $gte: today } })
+    //       .sort({ createdAt: -1 })
+    //       .limit(6)
+    //       .toArray();
+    //     res.json(featuredGroups);
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send("Server Error");
+    //   }
+    // });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
