@@ -43,18 +43,17 @@ async function run() {
 
     // get operation
 
-    app.get("/groups", async (req, res) => {
-  try {
-    const groups = await groupCollection.find().toArray();
-    res.json(groups);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Server Error");
-  }
-});
+    // app.get("/groups", async (req, res) => {
+    //   try {
+    //     const groups = await groupCollection.find().toArray();
+    //     res.json(groups);
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send("Server Error");
+    //   }
+    // });
 
-   
-// featured group get section
+    // featured group get section
 
     app.get("/featured-groups", async (req, res) => {
       try {
@@ -65,17 +64,51 @@ async function run() {
       }
     });
 
-    
     // end point for single group
 
     app.get("/groups/:id", async (req, res) => {
-  const id = req.params.id;
+      const id = req.params.id;
+      try {
+        const group = await groupCollection.findOne({ _id: new ObjectId(id) });
+        if (!group) {
+          return res.status(404).send("Group not found");
+        }
+        res.json(group);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send("Server Error");
+      }
+    });
+
+    
+    
+
+    // my group er end point
+// app.get("/groups", async (req, res) => {
+//   try {
+//     const query = {};
+//     if (req.query.createdByEmail) {
+//       query.createdByEmail = req.query.createdByEmail;
+//     }
+
+//     const groups = await groupCollection.find(query).toArray();
+//     res.json(groups);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).send("Server Error");
+//   }
+// });
+
+app.get("/groups", async (req, res) => {
+  console.log("Query received:", req.query.createdByEmail);
   try {
-    const group = await groupCollection.findOne({ _id: new ObjectId(id) });
-    if (!group) {
-      return res.status(404).send("Group not found");
+    const query = {};
+    if (req.query.createdByEmail) {
+      query.createdByEmail = req.query.createdByEmail;
     }
-    res.json(group);
+    const groups = await groupCollection.find(query).toArray();
+    console.log("Groups found:", groups);
+    res.json(groups);
   } catch (error) {
     console.error(error);
     res.status(500).send("Server Error");
@@ -83,25 +116,55 @@ async function run() {
 });
 
 
-  // delete api for per group
 
-app.delete("/groups/:id", async (req, res) => {
-  const id = req.params.id;
-  try {
-    const result = await groupCollection.deleteOne({ _id: new ObjectId(id) });
+    
 
-    if (result.deletedCount === 0) {
-      return res.status(404).send({ message: "Group not found" });
-    }
+    // delete api for per group
 
-    res.send({ success: true, message: "Group deleted successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ success: false, message: "Failed to delete group" });
-  }
-});
+    app.delete("/groups/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await groupCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
 
- 
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ message: "Group not found" });
+        }
+
+        res.send({ success: true, message: "Group deleted successfully" });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to delete group" });
+      }
+    });
+
+    // update group from database
+
+    app.put("/groups/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
+
+      try {
+        const result = await groupCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedData }
+        );
+
+        res.send({
+          message:
+            result.modifiedCount > 0
+              ? "Group updated successfully"
+              : "No changes made",
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (err) {
+        console.error("Failed to update group:", err);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
