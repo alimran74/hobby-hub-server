@@ -9,11 +9,10 @@ const port = process.env.PORT || 7000;
 app.use(cors());
 app.use(express.json());
 
-// /////////////////////////////////////////////
-
+// MongoDB URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@imran.chugnik.mongodb.net/?retryWrites=true&w=majority&appName=Imran`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+// MongoDB client
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -24,48 +23,47 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
-
-    // db collection
+    // Connect to MongoDB
+    // await client.connect();
 
     const groupCollection = client.db("hobbyDB").collection("groups");
 
-    // create post group api
-
+    // ✅ Create a group
     app.post("/groups", async (req, res) => {
       const newGroup = req.body;
-      console.log("Received group:", newGroup);
-
-      const result = await groupCollection.insertOne(newGroup);
-      res.send(result);
+      try {
+        const result = await groupCollection.insertOne(newGroup);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to create group" });
+      }
     });
 
-    // get operation
-
-    // app.get("/groups", async (req, res) => {
-    //   try {
-    //     const groups = await groupCollection.find().toArray();
-    //     res.json(groups);
-    //   } catch (error) {
-    //     console.error(error);
-    //     res.status(500).send("Server Error");
-    //   }
-    // });
-
-    // featured group get section
-
-    app.get("/featured-groups", async (req, res) => {
+    // ✅ Get all groups (optionally by creator)
+    app.get("/groups", async (req, res) => {
       try {
-        const groups = await groupCollection.find().toArray();
-        res.json(groups);
+        const query = {};
+        if (req.query.createdByEmail) {
+          query.createdByEmail = req.query.createdByEmail;
+        }
+        const groups = await groupCollection.find(query).toArray();
+        res.send(groups);
       } catch (error) {
         res.status(500).send("Server Error");
       }
     });
 
-    // end point for single group
+    // ✅ Get featured groups (same as all for now)
+    app.get("/featured-groups", async (req, res) => {
+      try {
+        const groups = await groupCollection.find().toArray();
+        res.send(groups);
+      } catch (error) {
+        res.status(500).send("Server Error");
+      }
+    });
 
+    // ✅ Get a single group
     app.get("/groups/:id", async (req, res) => {
       const id = req.params.id;
       try {
@@ -73,117 +71,78 @@ async function run() {
         if (!group) {
           return res.status(404).send("Group not found");
         }
-        res.json(group);
+        res.send(group);
       } catch (error) {
-        console.error(error);
         res.status(500).send("Server Error");
       }
     });
 
-    
-    
-
-    // my group er end point
-// app.get("/groups", async (req, res) => {
-//   try {
-//     const query = {};
-//     if (req.query.createdByEmail) {
-//       query.createdByEmail = req.query.createdByEmail;
-//     }
-
-//     const groups = await groupCollection.find(query).toArray();
-//     res.json(groups);
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).send("Server Error");
-//   }
-// });
-
-app.get("/groups", async (req, res) => {
-  console.log("Query received:", req.query.createdByEmail);
-  try {
-    const query = {};
-    if (req.query.createdByEmail) {
-      query.createdByEmail = req.query.createdByEmail;
-    }
-    const groups = await groupCollection.find(query).toArray();
-    console.log("Groups found:", groups);
-    res.json(groups);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Server Error");
-  }
-});
-
-
-
-    
-
-    // delete api for per group
-
+    // ✅ Delete a group (only if createdByEmail matches)
     app.delete("/groups/:id", async (req, res) => {
       const id = req.params.id;
+      const email = req.query.email; // must send ?email=...
+
       try {
         const result = await groupCollection.deleteOne({
           _id: new ObjectId(id),
+          createdByEmail: email,
         });
 
         if (result.deletedCount === 0) {
-          return res.status(404).send({ message: "Group not found" });
+          return res.status(403).send({ success: false, message: "Unauthorized or group not found" });
         }
 
         res.send({ success: true, message: "Group deleted successfully" });
       } catch (error) {
-        console.error(error);
-        res
-          .status(500)
-          .send({ success: false, message: "Failed to delete group" });
+        res.status(500).send({ success: false, message: "Failed to delete group" });
       }
     });
 
-    // update group from database
-
+    // ✅ Update a group (only if createdByEmail matches)
     app.put("/groups/:id", async (req, res) => {
-      const id = req.params.id;
-      const updatedData = req.body;
+  const id = req.params.id;
+  const updatedData = req.body;
 
-      try {
-        const result = await groupCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: updatedData }
-        );
+  try {
+    const group = await groupCollection.findOne({ _id: new ObjectId(id) });
 
-        res.send({
-          message:
-            result.modifiedCount > 0
-              ? "Group updated successfully"
-              : "No changes made",
-          modifiedCount: result.modifiedCount,
-        });
-      } catch (err) {
-        console.error("Failed to update group:", err);
-        res.status(500).send({ error: "Internal Server Error" });
-      }
-    });
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
 
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
+    // Check ownership
+    if (group.createdByEmail !== updatedData.createdByEmail) {
+      return res.status(403).json({ message: "Unauthorized or group not found" });
+    }
+
+    const result = await groupCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedData }
     );
+
+    res.json({
+      message: result.modifiedCount > 0 ? "Group updated successfully" : "No changes made",
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    console.error("Failed to update group:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+
+    console.log("Connected to MongoDB!");
   } finally {
-    // Ensures that the client will close when you finish/error
     // await client.close();
   }
 }
 run().catch(console.dir);
 
-// /////////////////////////////////////////////
-
+// Root route
 app.get("/", (req, res) => {
-  res.send("HobbyHub is getting to started");
+  res.send("🚀 HobbyHub Server is Running!");
 });
 
 app.listen(port, () => {
-  console.log(`Hobby Hub is running on port ${port}`);
+  console.log(`✅ HobbyHub backend running on port ${port}`);
 });
