@@ -28,7 +28,7 @@ async function run() {
 
     const groupCollection = client.db("hobbyDB").collection("groups");
 
-    // ✅ Create a group
+    // Create a new group
     app.post("/groups", async (req, res) => {
       const newGroup = req.body;
       try {
@@ -39,7 +39,7 @@ async function run() {
       }
     });
 
-    // ✅ Get all groups (optionally by creator)
+    // Get groups, optionally filter by createdByEmail
     app.get("/groups", async (req, res) => {
       try {
         const query = {};
@@ -53,7 +53,7 @@ async function run() {
       }
     });
 
-    // ✅ Get featured groups (same as all for now)
+    // Get featured groups (currently all groups)
     app.get("/featured-groups", async (req, res) => {
       try {
         const groups = await groupCollection.find().toArray();
@@ -63,7 +63,7 @@ async function run() {
       }
     });
 
-    // ✅ Get a single group
+    // Get single group by ID
     app.get("/groups/:id", async (req, res) => {
       const id = req.params.id;
       try {
@@ -77,10 +77,14 @@ async function run() {
       }
     });
 
-    // ✅ Delete a group (only if createdByEmail matches)
+    // Delete a group only if createdByEmail matches (email passed as query param)
     app.delete("/groups/:id", async (req, res) => {
       const id = req.params.id;
-      const email = req.query.email; // must send ?email=...
+      const email = req.query.email;
+
+      if (!email) {
+        return res.status(400).send({ success: false, message: "Missing email query parameter" });
+      }
 
       try {
         const result = await groupCollection.deleteOne({
@@ -98,53 +102,71 @@ async function run() {
       }
     });
 
-// 👇 Update group endpoint with authorization
-app.put("/groups/:id", async (req, res) => {
-  const id = req.params.id;
-  const updatedData = req.body;
+    // Update group only if createdByEmail matches (sent inside body)
+    app.put("/groups/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
+      const { createdByEmail } = updatedData;
+
+      if (!createdByEmail) {
+        return res.status(400).send({ message: "Missing creator email" });
+      }
+
+      // Optional: Remove _id from updatedData if it exists to avoid errors
+      if (updatedData._id) delete updatedData._id;
+
+      try {
+        const result = await groupCollection.updateOne(
+          { _id: new ObjectId(id), createdByEmail: createdByEmail },
+          { $set: updatedData }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(403).send({ message: "Unauthorized or group not found" });
+        }
+
+        res.send({
+          message: result.modifiedCount > 0 ? "Group updated successfully" : "No changes made",
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (err) {
+        console.error("Failed to update group:", err);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    // update profile info api 
+
+    // server/routes/userRoutes.js
+app.put("/api/users/:email", async (req, res) => {
+  const email = req.params.email;
+  const { displayName, photoURL } = req.body;
 
   try {
-    // 1️⃣ Find the existing group
-    const existingGroup = await groupCollection.findOne({ _id: new ObjectId(id) });
-
-    if (!existingGroup) {
-      return res.status(404).send({ message: "Group not found" });
-    }
-
-    // 2️⃣ Check if the current user is the creator
-    if (existingGroup.createdByEmail !== updatedData.createdByEmail) {
-      return res.status(403).send({ message: "Unauthorized or group not found" });
-    }
-
-    // 3️⃣ Remove createdByEmail to prevent accidental update
-    delete updatedData.createdByEmail;
-
-    // 4️⃣ Proceed with update
-    const result = await groupCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updatedData }
+    const result = await userCollection.updateOne(
+      { email },
+      {
+        $set: {
+          displayName,
+          photoURL,
+        },
+      },
+      { upsert: true } // optional: insert if not exists
     );
 
-    res.send({
-      message: result.modifiedCount > 0
-        ? "Group updated successfully"
-        : "No changes made",
-      modifiedCount: result.modifiedCount,
-    });
+    res.send({ success: true, result });
   } catch (err) {
-    console.error("Failed to update group:", err);
-    res.status(500).send({ error: "Internal Server Error" });
+    res.status(500).send({ success: false, message: "Server Error", error: err });
   }
 });
 
 
-
-
     console.log("Connected to MongoDB!");
   } finally {
-    // await client.close();
+    // await client.close(); // Keep connection open for server life
   }
 }
+
 run().catch(console.dir);
 
 // Root route
