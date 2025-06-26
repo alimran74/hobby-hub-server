@@ -98,37 +98,46 @@ async function run() {
       }
     });
 
-    // ✅ Update a group (only if createdByEmail matches)
-    app.put("/groups/:id", async (req, res) => {
+// 👇 Update group endpoint with authorization
+app.put("/groups/:id", async (req, res) => {
   const id = req.params.id;
   const updatedData = req.body;
 
   try {
-    const group = await groupCollection.findOne({ _id: new ObjectId(id) });
+    // 1️⃣ Find the existing group
+    const existingGroup = await groupCollection.findOne({ _id: new ObjectId(id) });
 
-    if (!group) {
-      return res.status(404).json({ message: "Group not found" });
+    if (!existingGroup) {
+      return res.status(404).send({ message: "Group not found" });
     }
 
-    // Check ownership
-    if (group.createdByEmail !== updatedData.createdByEmail) {
-      return res.status(403).json({ message: "Unauthorized or group not found" });
+    // 2️⃣ Check if the current user is the creator
+    if (existingGroup.createdByEmail !== updatedData.createdByEmail) {
+      return res.status(403).send({ message: "Unauthorized or group not found" });
     }
 
+    // 3️⃣ Remove createdByEmail to prevent accidental update
+    delete updatedData.createdByEmail;
+
+    // 4️⃣ Proceed with update
     const result = await groupCollection.updateOne(
       { _id: new ObjectId(id) },
       { $set: updatedData }
     );
 
-    res.json({
-      message: result.modifiedCount > 0 ? "Group updated successfully" : "No changes made",
+    res.send({
+      message: result.modifiedCount > 0
+        ? "Group updated successfully"
+        : "No changes made",
       modifiedCount: result.modifiedCount,
     });
   } catch (err) {
     console.error("Failed to update group:", err);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).send({ error: "Internal Server Error" });
   }
 });
+
+
 
 
     console.log("Connected to MongoDB!");
